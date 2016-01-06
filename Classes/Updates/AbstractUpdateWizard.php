@@ -225,7 +225,7 @@ abstract class AbstractUpdateWizard extends \TYPO3\CMS\Install\Updates\AbstractU
 		$where = sprintf(
 			'WHERE %s <> \'\'',
 			$mapping['mapFieldNames'][$this->getColumnName()]
-		). ' AND '.$mapping['mapFieldNames'][$this->getColumnName()].' <> \'0\' AND cast( '.$mapping['mapFieldNames'][$this->getColumnName()].' AS decimal ) = 0';
+		) . ' AND ' . $mapping['mapFieldNames'][$this->getColumnName()] . ' <> \'0\' AND STRCMP(CAST( ' . $mapping['mapFieldNames'][$this->getColumnName()] . ' AS decimal), ' . $mapping['mapFieldNames'][$this->getColumnName()] . ') = -1';
 
 		return $where;
 	}
