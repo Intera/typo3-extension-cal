@@ -1,0 +1,6 @@
+
+{
+	"name": "intera-typo3-extension/cal",
+	"description": "A calendar combining all the functions of the existing calendar extensions plus adding some new features. It is based on the ical standard",
+	"type": "typo3-cms-extension"
+}
