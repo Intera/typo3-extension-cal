@@ -201,6 +201,20 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 			}
 		}
 	}
+
+	protected function updatePiVars($type) {
+        $files = $_FILES[$this->prefixId]['name'][$type];
+        foreach ($files as $index => $file) {
+            if (!empty($file)){
+                $this->controller->piVars[$type][] = $file;
+            }
+            else {
+                unset($this->controller->piVars[$type][$index]);
+                unset($this->controller->piVars[$type . '_caption'][$index]);
+                unset($this->controller->piVars[$type . '_title'][$index]);
+            }
+        }
+    }
 	
 	protected function checkOnNewOrDeletableFiles($objectType, $type, &$insertFields, $uid) {
 		if ($this->conf ['view.'] ['enableAjax'] || $this->conf ['view.'] ['dontShowConfirmView'] == 1) {
@@ -240,9 +254,11 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 						} else if ($type == 'image' && ! empty ($allowedExt) && ! in_array ($fI ['fileext'], $allowedExt)) {
 							continue;
 						}
+						$uploadPath = '/srv/www/sportal_dev/shared/Data/fileadmin/user_upload/';
 						$theDestFile = $this->fileFunc->getUniqueName ($this->fileFunc->cleanFileName ($fI ['file']), $uploadPath);
 						GeneralUtility::upload_copy_move ($theFile, $theDestFile);
-						$insertFields [$type] [] = basename ($theDestFile);
+						$insertFields [$type] [] = '__NEW__' . basename ($theDestFile);
+						$this->controller->piVars[$type][$id] = '__NEW__' . basename($theDestFile);
 					}
 				}
 				
@@ -252,7 +268,8 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 					}
 				}
 			}
-			$insertFields [$type] = implode (',', $insertFields [$type]);
+            $insertFields [$type] = $this->controller->piVars [$type];
+            $this->checkOnTempFile ($type, $insertFields, $objectType, $uid);
 		} else {
 			$insertFields [$type] = $this->controller->piVars [$type];
 			$this->checkOnTempFile ($type, $insertFields, $objectType, $uid);
@@ -311,7 +328,7 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 		$fileObject = null;
 		if (substr ($fileOrig, 0, 7) == '__NEW__') {
 			$file = substr ($fileOrig, 7);
-			if (file_exists(PATH_site .'typo3temp/' .$file)) {
+			if (file_exists('/srv/www/sportal_dev/shared/Data/fileadmin/user_upload/' .$file)) {
 				\TYPO3\CMS\Core\Utility\GeneralUtility::upload_copy_move(PATH_site .'typo3temp/'. $file, $targetDirectory . $file);
 				$fileObject = $storage->getFile('user_upload/' . $file);
 		
@@ -369,7 +386,7 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 	protected function getAdditionalWhereForLocalizationAndVersioning($table) {
 		$localizationPrefix = 'l18n';
 		$selectConf = Array();
-		if($this->extConf ['categoryService'] == 'sys_category' && $this->extConf ['categoryService'] == $table) {
+		if('sys_category' == $table) {
 			$localizationPrefix = 'l10n';
 		}
 		if ($GLOBALS ['TSFE']->sys_language_mode == 'strict' && $GLOBALS ['TSFE']->sys_language_content) {
