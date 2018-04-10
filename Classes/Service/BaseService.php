@@ -16,6 +16,11 @@ namespace TYPO3\CMS\Cal\Service;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\CMS\Cal\Utility\Functions;
 use TYPO3\CMS\Cal\Controller\Registry;
+use TYPO3\CMS\Core\Resource\Exception\ResourceDoesNotExistException;
+use TYPO3\CMS\Core\Resource\File;
+use TYPO3\CMS\Core\Resource\Folder;
+use TYPO3\CMS\Core\Resource\ResourceFactory;
+use TYPO3\CMS\Core\Resource\ResourceStorage;
 
 /**
  * A base service.
@@ -201,7 +206,7 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 			}
 		}
 	}
-	
+
 	protected function checkOnNewOrDeletableFiles($objectType, $type, &$insertFields, $uid) {
 		if ($this->conf ['view.'] ['enableAjax'] || $this->conf ['view.'] ['dontShowConfirmView'] == 1) {
 			$insertFields [$type] = Array ();
@@ -240,19 +245,29 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 						} else if ($type == 'image' && ! empty ($allowedExt) && ! in_array ($fI ['fileext'], $allowedExt)) {
 							continue;
 						}
-						$theDestFile = $this->fileFunc->getUniqueName ($this->fileFunc->cleanFileName ($fI ['file']), $uploadPath);
+						$theDestFile = $this->fileFunc->getUniqueName ($this->fileFunc->cleanFileName ($fI ['file']), $this->getTempDirectory());
 						GeneralUtility::upload_copy_move ($theFile, $theDestFile);
-						$insertFields [$type] [] = basename ($theDestFile);
+						$fileIdentifier = '__NEW__' . basename ($theDestFile);
+						$insertFields [$type] [] = $fileIdentifier;
+						$this->controller->piVars[$type][$id] = $fileIdentifier;
 					}
 				}
-				
+
+				$resourceFactory = GeneralUtility::makeInstance(ResourceFactory::class);
 				foreach ($files as $file) {
 					if (in_array ($file, $removeFiles)) {
-						unlink ('typo3temp/' . $file);
+						try {
+							$fileReference = $resourceFactory->getFileReferenceObject($file);
+							if ($fileReference->getOriginalFile()->exists()) {
+								$fileReference->getOriginalFile()->delete();
+							}
+						} catch (ResourceDoesNotExistException $e) {
+							// Nothing to do if reference is already deleted.
+						}
 					}
 				}
 			}
-			$insertFields [$type] = implode (',', $insertFields [$type]);
+			$this->checkOnTempFile ($type, $insertFields, $objectType, $uid);
 		} else {
 			$insertFields [$type] = $this->controller->piVars [$type];
 			$this->checkOnTempFile ($type, $insertFields, $objectType, $uid);
@@ -267,34 +282,14 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 			}
 		}
 	}
-	
+
 	protected function checkOnTempFile($type, &$insertFields, $objectType, $uid) {
-		$fileadminDirectory = rtrim($GLOBALS['TYPO3_CONF_VARS']['BE']['fileadminDir'], '/') . '/';
-		/** @var $storageRepository \TYPO3\CMS\Core\Resource\StorageRepository */
-		$storageRepository = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('TYPO3\\CMS\\Core\\Resource\\StorageRepository');
-		$storages = $storageRepository->findAll();
-		foreach ($storages as $tmpStorage) {
-			$storageRecord = $tmpStorage->getStorageRecord();
-			$configuration = $tmpStorage->getConfiguration();
-			$isLocalDriver = $storageRecord['driver'] === 'Local';
-			$isOnFileadmin = !empty($configuration['basePath']) && \TYPO3\CMS\Core\Utility\GeneralUtility::isFirstPartOfStr($configuration['basePath'], $fileadminDirectory);
-			if ($isLocalDriver && $isOnFileadmin) {
-				$storage = $tmpStorage;
-				break;
-			}
-		}
-		if (!isset($storage)) {
-			throw new \RuntimeException('Local default storage could not be initialized - might be due to missing sys_file* tables.');
-		}
-		$fileFactory = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('TYPO3\\CMS\\Core\\Resource\\ResourceFactory');
-		$fileIndexRepository = \TYPO3\CMS\Core\Utility\GeneralUtility::makeInstance('TYPO3\\CMS\\Core\\Resource\\Index\\FileIndexRepository');
-		$targetDirectory = PATH_site . $fileadminDirectory . 'user_upload/';
 		if (is_array ($insertFields [$type])) {
 			foreach ($insertFields [$type] as $file) {
-				$this->_checkOnTempFile($storage, $fileIndexRepository, $targetDirectory, $type, $insertFields, $objectType, $file, $uid);
+				$this->_checkOnTempFile($type, $insertFields, $objectType, $file, $uid);
 			}
 		} else {
-			$this->_checkOnTempFile($storage, $fileIndexRepository, $targetDirectory, $type, $insertFields, $objectType, $insertFields [$type], $uid);
+			$this->_checkOnTempFile($type, $insertFields, $objectType, $insertFields [$type], $uid);
 		}
 		$count = $GLOBALS ['TYPO3_DB']->exec_SELECTcountRows ('uid', 'sys_file_reference', 'uid_foreign = ' . $uid . ' AND tablenames = \''.$objectType.'\' AND fieldname = \''.$type.'\'');
 		$result = $GLOBALS ['TYPO3_DB']->exec_UPDATEquery ($objectType, 'uid = '.$uid, Array($type => $count));
@@ -303,19 +298,55 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 		}
 		unset($insertFields [$type]);
 	}
-	
-	private function _checkOnTempFile(&$storage, &$fileIndexRepository, $targetDirectory, $type, &$insertFields, $objectType, $fileOrig, $uid) {
+
+	/**
+	 * @param $type
+	 * @return ResourceStorage|object
+	 */
+	private function getFileStorageForType($type) {
+		if (empty($this->conf['view.'][$type . '_storage.']['identifier'])) {
+			throw new \RuntimeException('No file storage identifier configured for type ' . $type);
+		}
+		/** @var $storageRepository \TYPO3\CMS\Core\Resource\ResourceFactory */
+		$storageRepository = GeneralUtility::makeInstance(ResourceFactory::class);
+		return $storageRepository->getStorageObject($this->conf['view.'][$type . '_storage.']['identifier']);
+	}
+
+	/**
+	 * @param string $type
+	 * @return Folder
+	 */
+	private function getFileUploadFolderForType($type) {
+		$storage = $this->getFileStorageForType($type);
+		if (empty($this->conf['view.'][$type . '_storage.']['folder'])) {
+			throw new \RuntimeException('No upload folder configured for type ' . $type);
+		}
+		$folderIdentifier = $this->conf['view.'][$type . '_storage.']['folder'];
+		$storage->setEvaluatePermissions(false);
+		if ($storage->hasFolder($folderIdentifier)) {
+			return $storage->getFolder($folderIdentifier);
+		}
+
+		return $storage->createFolder($folderIdentifier);
+	}
+
+	private function getTempDirectory() {
+		return PATH_site . 'typo3temp/';
+	}
+
+
+	private function _checkOnTempFile($type, &$insertFields, $objectType, $fileOrig, $uid) {
 		if(strlen($fileOrig)==0){
 			return;
 		}
 		$fileObject = null;
 		if (substr ($fileOrig, 0, 7) == '__NEW__') {
 			$file = substr ($fileOrig, 7);
-			if (file_exists(PATH_site .'typo3temp/' .$file)) {
-				\TYPO3\CMS\Core\Utility\GeneralUtility::upload_copy_move(PATH_site .'typo3temp/'. $file, $targetDirectory . $file);
-				$fileObject = $storage->getFile('user_upload/' . $file);
-		
-				$fileIndexRepository->add($fileObject);
+			if (file_exists($this->getTempDirectory() . $file)) {
+				$uploadFolder = $this->getFileUploadFolderForType($type);
+				/** @var File $fileObject */
+				$fileObject = $uploadFolder->addFile($this->getTempDirectory() . $file, NULL, 'rename');
+
 				$dataArray = array(
 						'uid_local' => $fileObject->getUid(),
 						'tablenames' => $objectType,
@@ -342,7 +373,6 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 				if (FALSE === $result){
 					throw new \RuntimeException('Could not write sys_file_reference record to database: '.$GLOBALS ['TYPO3_DB']->sql_error(), 1431458138);
 				}
-				unlink(PATH_site .'typo3temp/'. $file);
 			}
 		} else {
 			$dataArray = Array();
