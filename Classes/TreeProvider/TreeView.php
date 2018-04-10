@@ -661,6 +661,7 @@ class TreeView {
 					if ($config ['treeViewClass'] and is_object ($treeViewObj = &GeneralUtility::getUserObj ($config ['treeViewClass'], 'user_', false))) {
 					} else {
 						$treeViewObj = new \TYPO3\CMS\Cal\Backend\TCA\TceFuncSelectTreeView();
+						$treeViewObj->MOUNTS = [];
 					}
 					
 					if ((TYPO3_MODE == 'BE') || ($GLOBALS ['TSFE']->beUserLogin && $GLOBALS ['BE_USER']->extAdmEnabled)) {
