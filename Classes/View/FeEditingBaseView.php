@@ -754,8 +754,8 @@ class FeEditingBaseView extends \TYPO3\CMS\Cal\View\BaseView {
 			$this->conf ['view.'] [$this->conf ['view'] . '.'] [$this->objectString . '.'] [$marker . '.'] ['file'] = $file;
 		} else {
 			// Render existing image -> $file is a sys_file_reference record
-			$result = $GLOBALS ['TYPO3_DB']->exec_SELECTgetSingleRow ( 'identifier', 'sys_file', 'uid = ' . $file ['uid_local'] );
-			$this->conf ['view.'] [$this->conf ['view'] . '.'] [$this->objectString . '.'] [$marker . '.'] ['file'] = 'fileadmin' . $result ['identifier'];
+			$result = $GLOBALS ['TYPO3_DB']->exec_SELECTgetSingleRow('identifier, storage', 'sys_file', 'uid = ' . $file ['uid_local']);
+			$this->conf ['view.'] [$this->conf ['view'] . '.'] [$this->objectString . '.'] [$marker . '.'] ['file'] = $result ['storage'] . ':' . $result ['identifier'];
 		}
 		$this->conf ['view.'] [$this->conf ['view'] . '.'] [$this->objectString . '.'] [$marker . '.'] ['titleText'] = $title;
 		$this->conf ['view.'] [$this->conf ['view'] . '.'] [$this->objectString . '.'] [$marker . '.'] ['wrap'] = '|<figcaption>' . $caption . '</figcaption>';
