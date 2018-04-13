@@ -267,10 +267,8 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 					}
 				}
 			}
-			$this->checkOnTempFile ($type, $insertFields, $objectType, $uid);
 		} else {
 			$insertFields [$type] = $this->controller->piVars [$type];
-			$this->checkOnTempFile ($type, $insertFields, $objectType, $uid);
 		}
 		
 		$removeFiles = $this->controller->piVars ['remove_' . $type] ? $this->controller->piVars ['remove_' . $type] : Array ();
@@ -281,6 +279,8 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 				throw new \RuntimeException('Could not write sys_file_reference record to database: '.$GLOBALS ['TYPO3_DB']->sql_error(), 1431458138);
 			}
 		}
+
+		$this->checkOnTempFile($type, $insertFields, $objectType, $uid);
 	}
 
 	protected function checkOnTempFile($type, &$insertFields, $objectType, $uid) {
@@ -291,7 +291,7 @@ abstract class BaseService extends \TYPO3\CMS\Core\Service\AbstractService {
 		} else {
 			$this->_checkOnTempFile($type, $insertFields, $objectType, $insertFields [$type], $uid);
 		}
-		$count = $GLOBALS ['TYPO3_DB']->exec_SELECTcountRows ('uid', 'sys_file_reference', 'uid_foreign = ' . $uid . ' AND tablenames = \''.$objectType.'\' AND fieldname = \''.$type.'\'');
+		$count = $GLOBALS ['TYPO3_DB']->exec_SELECTcountRows('uid', 'sys_file_reference', 'uid_foreign = ' . $uid . ' AND tablenames = \'' . $objectType . '\' AND fieldname = \'' . $type . '\' AND deleted = 0');
 		$result = $GLOBALS ['TYPO3_DB']->exec_UPDATEquery ($objectType, 'uid = '.$uid, Array($type => $count));
 		if (FALSE === $result){
 			throw new \RuntimeException('Could not write sys_file_reference record to database: '.$GLOBALS ['TYPO3_DB']->sql_error(), 1431458138);
