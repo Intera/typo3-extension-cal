@@ -530,7 +530,8 @@ class TreeView {
 					
 					$confArr = unserialize ($GLOBALS ['TYPO3_CONF_VARS'] ['EXT'] ['extConf'] ['cal']);
 					$treeOrderBy = $confArr ['treeOrderBy'] ? $confArr ['treeOrderBy'] : 'uid';
-					
+
+					$notAllowedItems = [];
 					if ($GLOBALS ['BE_USER']->getTSConfigVal ('options.useListOfAllowedItems') && ! $GLOBALS ['BE_USER']->isAdmin ()) {
 						
 						$notAllowedItems = $this->getNotAllowedItems ($PA, $SPaddWhere);
@@ -661,6 +662,7 @@ class TreeView {
 					if ($config ['treeViewClass'] and is_object ($treeViewObj = &GeneralUtility::getUserObj ($config ['treeViewClass'], 'user_', false))) {
 					} else {
 						$treeViewObj = new \TYPO3\CMS\Cal\Backend\TCA\TceFuncSelectTreeView();
+						$treeViewObj->MOUNTS = [];
 					}
 					
 					if ((TYPO3_MODE == 'BE') || ($GLOBALS ['TSFE']->beUserLogin && $GLOBALS ['BE_USER']->extAdmEnabled)) {

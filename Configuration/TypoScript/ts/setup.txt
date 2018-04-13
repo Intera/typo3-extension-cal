@@ -89,6 +89,16 @@ plugin.tx_cal_controller {
 		# @description	Relative path (from TYPO3 site root) that images should be loaded from.
 		# @also					Constants
 		imagePath = {$plugin.tx_cal_controller.view.imagePath}
+
+		image_storage {
+			identifier = 1
+			folder = user_upload/tx_cal/images
+		}
+
+		attachment_storage {
+			identifier = 1
+			folder = user_upload/tx_cal/attachments
+		}
 		
 		# @description	Relative path (from TYPO3 site root) that javascripts should be loaded from.
 		# @also					Constants
